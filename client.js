@@ -1,19 +1,21 @@
 /**
  * Session Hub — client half.
  *
- * Registers a global sidebar panel through the shell's own seats, exactly like
- * the shipped Plugins / Schedule pages and the task-board plugin do:
- *   - one row in `sidebar.panellist` (the rail icon + label),
- *   - one keyed page in the layout's `main` slot.
+ * Registers one Conversation target View through the conversation package's
+ * own seat — the same slot that renders the shipped 对话 / 轨迹 / Git / 上下文
+ * tabs (`conversation.view`). The header tab row lists every registered view,
+ * so the hub appears as "会话中心" next to them: click it to peek, click
+ * 对话 to return; each session remembers its last active view.
  *
- * The page shows three sections driven by the client session/workspaces
+ * The view shows three sections driven by the client session/workspaces
  * catalogs (no polling, no Host RPC):
  *   1. 工作目录 — every workspace with a one-click "new session" action,
  *   2. 进行中   — running top-level sessions (subagents excluded),
  *   3. 最近     — most recent non-blank sessions.
  *
  * Actions go through ctx.uiWorkspace when present (the official navigation
- * face), with a sessions.retain + layout.selectPanel fallback.
+ * face), with a sessions.retain fallback. No panel switch is needed: the hub
+ * renders inside the conversation panel, and view switching is native.
  */
 window.__ModuleLoader__.load({
   id: '@local/session-hub',
@@ -21,9 +23,9 @@ window.__ModuleLoader__.load({
     const React = require('react')
 
     const NS = 'session-hub'
-    const PANEL_ID = 'session-hub'
-    // Rail order: Plugins=0, Schedule=10, task-board=20 → this lands after them.
-    const PANEL_ORDER = 30
+    const VIEW_ID = 'session-hub'
+    // Tab order: chat=0 … this lands after the shipped views (对话/Git/上下文).
+    const VIEW_ORDER = 900
 
     // ---------------------------------------------------------------- locale
 
@@ -69,7 +71,7 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------------- styles
 
     const CSS = [
-      '.shub-panel{height:100%;overflow:hidden;box-sizing:border-box;padding:14px 16px 16px;color:var(--dsw-alias-label-primary,inherit);font-size:13px;line-height:1.45;display:flex;flex-direction:column;}',
+      '.shub-panel{flex:1 1 auto;height:100%;min-height:0;overflow:hidden;box-sizing:border-box;padding:10px 16px 14px;color:var(--dsw-alias-label-primary,inherit);font-size:13px;line-height:1.45;display:flex;flex-direction:column;}',
       '.shub-inner{flex:1 1 auto;min-height:0;display:flex;gap:18px;align-items:stretch;width:100%;max-width:1100px;margin:0 auto;}',
       '.shub-section{flex:1 1 0;min-width:0;display:flex;flex-direction:column;min-height:0;}',
       '.shub-section-title{flex:none;display:flex;align-items:center;gap:6px;margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-primary,inherit));opacity:.85;}',
@@ -98,6 +100,11 @@ window.__ModuleLoader__.load({
       '.shub-new-btn{flex:none;padding:2px 10px;border:1px solid var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.3));border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;}',
       '.shub-new-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.14));}',
       '.shub-loading{padding:8px 10px;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-primary,inherit));opacity:.7;font-size:12px;}',
+      // While the hub view is active, drop the composer seat entirely — the
+      // same outcome as the shipped 轨迹 / 上下文 views (they opt into the
+      // composer-overlay layout via data-conversation-composer-overlay; we
+      // additionally remove the seat so nothing floats over the lists).
+      '[data-conversation-scroll]:has([data-dsh-session-hub-view]) [data-composer-seat]{display:none!important;}',
     ].join('\n')
 
     // ---------------------------------------------------------------- helpers
@@ -185,23 +192,12 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------------- actions
 
     function createActions(ctx) {
-      async function reveal() {
-        const layout = ctx.get('layout')
-        if (layout && typeof layout.selectPanel === 'function') {
-          try {
-            layout.selectPanel('conversation')
-          } catch (error) {
-            console.error('[session-hub] selectPanel failed:', error)
-          }
-        }
-      }
       return {
         async openSession(sessionId) {
           const uiWorkspace = ctx.uiWorkspace || ctx.get('uiWorkspace')
           if (uiWorkspace && typeof uiWorkspace.openSession === 'function') {
             try {
               await uiWorkspace.openSession(sessionId)
-              await reveal()
               return
             } catch (error) {
               console.error('[session-hub] openSession failed:', error)
@@ -212,7 +208,6 @@ window.__ModuleLoader__.load({
             if (sessions && typeof sessions.retain === 'function') {
               sessions.retain(sessionId, { source: 'mainView' })
             }
-            await reveal()
           } catch (error) {
             console.error('[session-hub] fallback open failed:', error)
           }
@@ -222,7 +217,6 @@ window.__ModuleLoader__.load({
           if (uiWorkspace && typeof uiWorkspace.startSession === 'function') {
             try {
               await uiWorkspace.startSession(workspaceId)
-              await reveal()
               return
             } catch (error) {
               console.error('[session-hub] startSession failed:', error)
@@ -231,11 +225,8 @@ window.__ModuleLoader__.load({
           try {
             const sessions = ctx.get('sessions')
             const id = await sessions.create({ workspaceId })
-            if (id) {
-              if (typeof sessions.retain === 'function') {
-                sessions.retain(id, { source: 'mainView' })
-              }
-              await reveal()
+            if (id && typeof sessions.retain === 'function') {
+              sessions.retain(id, { source: 'mainView' })
             }
           } catch (error) {
             console.error('[session-hub] fallback create failed:', error)
@@ -246,7 +237,6 @@ window.__ModuleLoader__.load({
           if (uiWorkspace && typeof uiWorkspace.openWorkspace === 'function') {
             try {
               await uiWorkspace.openWorkspace(workspaceId)
-              await reveal()
             } catch (error) {
               console.error('[session-hub] openWorkspace failed:', error)
             }
@@ -256,31 +246,6 @@ window.__ModuleLoader__.load({
     }
 
     // ------------------------------------------------------------- components
-
-    /** The rail glyph; the shell owns the button, label, active highlight. */
-    function HubIcon(props) {
-      const size = Number(props && props.size) || 16
-      return React.createElement(
-        'svg',
-        {
-          'data-dsh-panel-entry': PANEL_ID,
-          viewBox: '0 0 16 16',
-          width: size,
-          height: size,
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 1.3,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          'aria-hidden': true,
-        },
-        React.createElement('circle', { key: 'c', cx: 8, cy: 8, r: 2 }),
-        React.createElement('path', {
-          key: 'p',
-          d: 'M8 1.8v2.7M8 11.5v2.7M1.8 8h2.7M11.5 8h2.7',
-        }),
-      )
-    }
 
     function SessionRow(props) {
       const { row, t, actions, workspaceTitle, current } = props
@@ -383,7 +348,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** The main-slot page. */
+    /** The Conversation target View (rendered one at a time by the header tabs). */
     function HubPanel(props) {
       const { sessions, workspaces, t, actions } = props
       const sessionSnap = useSnapshot(sessions.list)
@@ -457,7 +422,15 @@ window.__ModuleLoader__.load({
 
       return React.createElement(
         'div',
-        { className: 'shub-panel', 'data-dsh-session-hub-view': '' },
+        // data-conversation-composer-overlay mirrors TrajectoryView /
+        // StatsView: tells the conversation layout this view owns the full
+        // height (viewArea becomes flex:1 1 0 with the composer overlaid),
+        // and the CSS above removes the seat while this view is mounted.
+        {
+          className: 'shub-panel',
+          'data-dsh-session-hub-view': '',
+          'data-conversation-composer-overlay': '',
+        },
         React.createElement(
           'style',
           { key: 'shub-css' },
@@ -533,7 +506,7 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------------ apply
 
     return {
-      inject: ['slots', 'locale', 'sessions', 'workspaces', 'layout', 'uiWorkspace'],
+      inject: ['slots', 'locale', 'sessions', 'workspaces', 'uiWorkspace'],
       apply(ctx) {
         ctx.effect(() => {
           try {
@@ -549,25 +522,20 @@ window.__ModuleLoader__.load({
         const disposers = []
         try {
           const slots = ctx.slots
+          // Same seat the shipped 对话 / 轨迹 / Git / 上下文 tabs come from
+          // (see dsh-client-ui-chat: slots.inject("conversation.view", ...)).
+          // Registration defers until the conversation package declares the
+          // hole, so load order does not matter; the header refreshes its tab
+          // list through slots.subscribe("conversation.view", ...).
           disposers.push(
-            slots.inject('sidebar.panellist', () =>
+            slots.inject('conversation.view', () =>
               slots.register(
                 {
-                  name: 'sidebar.panellist',
-                  id: PANEL_ID,
-                  order: PANEL_ORDER,
+                  name: 'conversation.view',
+                  id: VIEW_ID,
+                  order: VIEW_ORDER,
                   label: () => t('panel.label'),
-                },
-                HubIcon,
-              ),
-            ),
-          )
-          disposers.push(
-            slots.inject('main', () =>
-              slots.register(
-                {
-                  name: 'main',
-                  key: PANEL_ID,
+                  locale: NS,
                   inject: () => ({
                     sessions: ctx.get('sessions'),
                     workspaces: ctx.get('workspaces'),
@@ -580,12 +548,12 @@ window.__ModuleLoader__.load({
             ),
           )
         } catch (error) {
-          // A shell that cannot serve the seats degrades the panel, never the GUI.
-          console.error('[session-hub] panel registration failed:', error)
+          // A shell that cannot serve the seat degrades the view, never the GUI.
+          console.error('[session-hub] view registration failed:', error)
         }
         ctx.effect(() => () => {
           for (const dispose of disposers.splice(0)) dispose()
-        }, NS + ': panels')
+        }, NS + ': view')
       },
     }
   },
