@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session hub",
+    "description": "A sidebar panel that starts a new conversation per workspace and gathers running and recent sessions for quick switching."
+  }
+}
