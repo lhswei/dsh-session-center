@@ -350,7 +350,7 @@ window.__ModuleLoader__.load({
 
     /** The Conversation target View (rendered one at a time by the header tabs). */
     function HubPanel(props) {
-      const { sessions, workspaces, t, actions } = props
+      const { sessions, workspaces, t, actions, openView } = props
       const sessionSnap = useSnapshot(sessions.list)
       const wsSnap = useSnapshot(workspaces.list)
 
@@ -420,6 +420,25 @@ window.__ModuleLoader__.load({
         (!sessionSnap || sessionSnap.phase === 'pending') ||
         (!wsSnap || wsSnap.state === 'loading')
 
+      // openView is the owner prop the conversation package hands to every
+      // view (the same call the header tabs make: activate the view and set
+      // the session's view store). For the session already open in the main
+      // view, re-opening is a no-op — the correct action is to hand control
+      // back to the chat view. Without openView (older hosts), fall back to
+      // plain openSession.
+      const rowActions = React.useMemo(() => {
+        if (typeof openView !== 'function') return actions
+        return Object.assign({}, actions, {
+          openSession(sessionId) {
+            if (sessionId === currentId) {
+              openView('chat')
+              return undefined
+            }
+            return actions.openSession(sessionId)
+          },
+        })
+      }, [actions, openView, currentId])
+
       return React.createElement(
         'div',
         // data-conversation-composer-overlay mirrors TrajectoryView /
@@ -470,7 +489,7 @@ window.__ModuleLoader__.load({
                     key: row.sessionId,
                     row,
                     t,
-                    actions,
+                    actions: rowActions,
                     workspaceTitle: (function () {
                       const ws = wsBySession.get(row.sessionId)
                       return ws ? ws.title || basename(ws.path) : ''
@@ -490,7 +509,7 @@ window.__ModuleLoader__.load({
                     key: row.sessionId,
                     row,
                     t,
-                    actions,
+                    actions: rowActions,
                     workspaceTitle: (function () {
                       const ws = wsBySession.get(row.sessionId)
                       return ws ? ws.title || basename(ws.path) : ''
