@@ -1,0 +1,6 @@
+url: https://github.com/lhswei/dsh-session-center
+name: lhswei/dsh-session-center
+category: session
+description:
+  en: Session hub panel that lists workspaces with per-workspace new-session actions plus running and recent sessions for fast switching.
+  zh: 会话中心面板，按工作目录快速开新会话，集中展示进行中与最近会话，一键打开切换。

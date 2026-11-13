@@ -64,16 +64,17 @@ session-hub/
 │   ├── en.json
 │   └── zh.json         # 显示元数据（Plugin Manager 里展示的名称/描述）
 ├── icon.svg            # 面板图标
+├── marketplace/        # 插件市场收录提交包（条目 yml + 提交步骤）
 └── README.md
 ```
 
 ## 发布（维护者）
 
-发布到 DSH 插件市场的路径：
+发布到 DSH 插件市场的路径（详细步骤与自查清单见 [marketplace/README.md](marketplace/README.md)）：
 
 1. **改正式包名**：`package.json` 的 `name` 从 `@local/session-hub` 改为 npm 上的正式名（如 `dsh-session-center`），同步修改 `cordis.patch.yml` 里的 `name` 与 client 模块 `id`
 2. **发布到 npm**：`npm publish`（公开包）
-3. **提交市场收录**：按 dshmarket 的收录流程提交仓库地址
+3. **提交市场收录**：向 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 发 PR，新增 `data/plugins/lhswei__dsh-session-center.yml`（现成文件在本仓库 `marketplace/` 目录）。要求：仓库添加 topic `dsh-plugin`、创建满 1 天、`dsh.bundle` 清单完整（本仓库已符合）
 
 ## License
 
